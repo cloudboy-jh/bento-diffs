@@ -1,0 +1,8 @@
+/bento-diffs
+/bento-diffs.exe
+dist/
+coverage.out
+*.test
+*.exe
+*.log
+.DS_Store
