@@ -1,3 +1,5 @@
+![bento-diffs screenshot](./screen-shot-readme.png)
+
 # bento-diffs
 
 Simple terminal diff viewer that works as both a CLI app and a Go library.
