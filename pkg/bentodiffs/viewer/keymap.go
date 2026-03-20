@@ -1,4 +1,4 @@
-package model
+package viewer
 
 type keyMap struct {
 	Down     keyBinding
@@ -7,6 +7,8 @@ type keyMap struct {
 	PageUp   keyBinding
 	NextFile keyBinding
 	PrevFile keyBinding
+	NextHunk keyBinding
+	PrevHunk keyBinding
 	Toggle   keyBinding
 	Filter   keyBinding
 	Apply    keyBinding
@@ -31,11 +33,13 @@ func defaultKeyMap() keyMap {
 		PageUp:   keyBinding{keys: []string{"ctrl+u"}},
 		NextFile: keyBinding{keys: []string{"]"}},
 		PrevFile: keyBinding{keys: []string{"["}},
+		NextHunk: keyBinding{keys: []string{"n"}},
+		PrevHunk: keyBinding{keys: []string{"N"}},
 		Toggle:   keyBinding{keys: []string{"tab"}},
 		Filter:   keyBinding{keys: []string{"/"}},
 		Apply:    keyBinding{keys: []string{"enter"}},
 		Clear:    keyBinding{keys: []string{"esc"}},
-		Palette:  keyBinding{keys: []string{"ctrl+k"}},
+		Palette:  keyBinding{keys: []string{"ctrl+k", "p"}},
 		Quit:     keyBinding{keys: []string{"q", "ctrl+c"}},
 	}
 }

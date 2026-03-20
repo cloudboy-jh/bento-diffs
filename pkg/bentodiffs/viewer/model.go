@@ -1,14 +1,14 @@
-package model
+package viewer
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/cloudboy-jh/bento-diffs/bricks/diffpane"
 	"github.com/cloudboy-jh/bento-diffs/bricks/fileheader"
-	"github.com/cloudboy-jh/bento-diffs/internal/adapter"
+	"github.com/cloudboy-jh/bento-diffs/pkg/bentodiffs/parser"
+	"github.com/cloudboy-jh/bento-diffs/pkg/bentodiffs/workspace"
 	"github.com/cloudboy-jh/bento-diffs/recipes/commandpaletteflow"
 	"github.com/cloudboy-jh/bento-diffs/recipes/emptystatepane"
 	"github.com/cloudboy-jh/bento-diffs/recipes/filterbar"
@@ -22,56 +22,48 @@ import (
 type Layout int
 
 const (
+	// LayoutSplit renders two side-by-side columns.
 	LayoutSplit Layout = iota
+	// LayoutStacked renders a single unified column.
 	LayoutStacked
 )
 
+// Options configures viewer model behavior.
 type Options struct {
 	Layout          Layout
 	SyntaxEnabled   bool
 	ShowLineNumbers bool
-	UseTTYInput     bool
 }
 
-type app struct {
-	program *tea.Program
+// State is a readonly snapshot of model state.
+type State struct {
+	Width      int
+	Height     int
+	Layout     Layout
+	ActiveFile int
+	Visible    []int
+	FileCount  int
+	Scroll     int
+	MaxScroll  int
+	HunkStarts []int
+	ActiveHunk int
+	FilterMode bool
+	Filter     string
+	ShowEmpty  bool
 }
 
 type toggleLayoutMsg struct{}
 type nextFileMsg struct{}
 type prevFileMsg struct{}
+type nextHunkMsg struct{}
+type prevHunkMsg struct{}
 type startFilterMsg struct{}
 type clearFilterMsg struct{}
+type openThemePickerMsg struct{}
 
-func New(workspace *adapter.WorkspaceAdapter, t theme.Theme, opts Options) *app {
-	m := &model{
-		theme:     t,
-		workspace: workspace,
-		layout:    opts.Layout,
-		syntax:    opts.SyntaxEnabled,
-		lineNums:  opts.ShowLineNumbers,
-		keys:      defaultKeyMap(),
-	}
-	m.initWidgets()
-
-	programOpts := []tea.ProgramOption{}
-	if opts.UseTTYInput {
-		if tty, err := os.Open("CONIN$"); err == nil {
-			programOpts = append(programOpts, tea.WithInput(tty))
-		}
-	}
-	p := tea.NewProgram(m, programOpts...)
-	return &app{program: p}
-}
-
-func (a *app) Run() error {
-	_, err := a.program.Run()
-	return err
-}
-
-type model struct {
+type Model struct {
 	theme      theme.Theme
-	workspace  *adapter.WorkspaceAdapter
+	workspace  *workspace.Adapter
 	activeFile int
 	layout     Layout
 	syntax     bool
@@ -91,17 +83,31 @@ type model struct {
 	filterMode  bool
 	showEmpty   bool
 	visible     []int
+	hunkStarts  []int
 }
 
-func (m *model) Init() tea.Cmd { return nil }
+// New builds a viewer model from parsed diffs.
+func New(diffs []parser.DiffResult, t theme.Theme, opts Options) *Model {
+	m := &Model{
+		theme:     t,
+		workspace: workspace.New(diffs),
+		layout:    opts.Layout,
+		syntax:    opts.SyntaxEnabled,
+		lineNums:  opts.ShowLineNumbers,
+		keys:      defaultKeyMap(),
+	}
+	m.initWidgets()
+	return m
+}
 
-func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// Init implements tea.Model.
+func (m *Model) Init() tea.Cmd { return nil }
+
+// Update implements tea.Model.
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch mm := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = mm.Width
-		m.height = mm.Height
-		m.resize()
-		m.refreshWorkspace(false)
+		m.SetSize(mm.Width, mm.Height)
 		m.dialogs.SetSize(mm.Width, mm.Height)
 	case dialog.OpenMsg, dialog.CloseMsg:
 		u, cmd := m.dialogs.Update(mm)
@@ -110,9 +116,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toggleLayoutMsg:
 		m.toggleLayout()
 	case nextFileMsg:
-		m.nextFile()
+		m.NextFile()
 	case prevFileMsg:
-		m.prevFile()
+		m.PrevFile()
+	case nextHunkMsg:
+		m.NextHunk()
+	case prevHunkMsg:
+		m.PrevHunk()
 	case startFilterMsg:
 		m.filterMode = true
 		m.filterBar.Input.SetValue(m.filterQuery)
@@ -123,6 +133,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filterBar.Input.SetValue("")
 		m.filterBar.Input.Blur()
 		m.refreshWorkspace(true)
+	case openThemePickerMsg:
+		return m, openThemePicker()
 	case tea.MouseMsg:
 		if m.filterMode || m.dialogs.IsOpen() {
 			return m, nil
@@ -130,9 +142,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		mouse := mm.Mouse()
 		switch mouse.Button {
 		case tea.MouseWheelDown:
-			m.diffPane.ScrollDown(3)
+			m.ScrollDown(3)
 		case tea.MouseWheelUp:
-			m.diffPane.ScrollUp(3)
+			m.ScrollUp(3)
 		}
 	case tea.KeyMsg:
 		if m.dialogs.IsOpen() {
@@ -168,19 +180,23 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case keyMatch(mm, m.keys.Quit):
 			return m, tea.Quit
 		case keyMatch(mm, m.keys.Down):
-			m.diffPane.ScrollDown(1)
+			m.ScrollDown(1)
 		case keyMatch(mm, m.keys.Up):
-			m.diffPane.ScrollUp(1)
+			m.ScrollUp(1)
 		case keyMatch(mm, m.keys.PageDown):
-			m.diffPane.ScrollDown(max(1, m.contentHeight()/2))
+			m.ScrollDown(max(1, m.contentHeight()/2))
 		case keyMatch(mm, m.keys.PageUp):
-			m.diffPane.ScrollUp(max(1, m.contentHeight()/2))
+			m.ScrollUp(max(1, m.contentHeight()/2))
 		case keyMatch(mm, m.keys.Toggle):
 			m.toggleLayout()
 		case keyMatch(mm, m.keys.NextFile):
-			m.nextFile()
+			m.NextFile()
 		case keyMatch(mm, m.keys.PrevFile):
-			m.prevFile()
+			m.PrevFile()
+		case keyMatch(mm, m.keys.NextHunk):
+			m.NextHunk()
+		case keyMatch(mm, m.keys.PrevHunk):
+			m.PrevHunk()
 		case keyMatch(mm, m.keys.Filter):
 			m.filterMode = true
 			m.filterBar.Input.SetValue(m.filterQuery)
@@ -189,20 +205,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.openPalette()
 		}
 	case theme.ThemeChangedMsg:
-		m.theme = mm.Theme
-		m.fileHeader.SetTheme(mm.Theme)
-		m.diffPane.SetTheme(mm.Theme)
-		m.emptyPane.SetTheme(mm.Theme)
-		m.filterBar.SetTheme(mm.Theme)
-		m.footer.SetTheme(mm.Theme)
-		m.dialogs.SetTheme(mm.Theme)
-		m.refreshWorkspace(false)
+		m.SetTheme(mm.Theme)
 	}
 
 	return m, nil
 }
 
-func (m *model) View() tea.View {
+// View implements tea.Model.
+func (m *Model) View() tea.View {
 	if m.width <= 0 || m.height <= 0 {
 		v := tea.NewView("")
 		v.AltScreen = true
@@ -229,58 +239,59 @@ func (m *model) View() tea.View {
 	return v
 }
 
-func (m *model) initWidgets() {
-	m.fileHeader = fileheader.New(m.theme)
-	m.diffPane = diffpane.New(m.theme)
-	m.emptyPane = emptystatepane.New("No diff content", "Nothing to show yet.", m.theme)
-	m.filterBar = filterbar.New("bento-diffs", m.theme)
-	m.dialogs = dialog.New()
-	m.dialogs.SetTheme(m.theme)
-	m.footer = bar.New(
-		bar.FooterAnchored(),
-		bar.WithTheme(m.theme),
-	)
-	m.refreshWorkspace(true)
+// Render returns the current view as a string.
+func (m *Model) Render() string {
+	return viewString(m.View())
 }
 
-func (m *model) resize() {
-	if m.fileHeader == nil {
-		return
-	}
-	m.fileHeader.SetSize(m.width, 1)
-	m.footer.SetSize(m.width, 1)
-	m.filterBar.SetSize(m.width)
-	diffWidth := max(1, m.width)
-	m.diffPane.SetSize(diffWidth, m.contentHeight())
-	m.emptyPane.SetSize(diffWidth, m.contentHeight())
-}
-
-func (m *model) toggleLayout() {
-	if m.layout == LayoutSplit {
-		m.layout = LayoutStacked
-	} else {
-		m.layout = LayoutSplit
-	}
+// SetSize updates viewport dimensions.
+func (m *Model) SetSize(width, height int) {
+	m.width = width
+	m.height = height
 	m.resize()
+	m.refreshWorkspace(false)
+}
+
+// SetTheme applies a new theme and rerenders.
+func (m *Model) SetTheme(t theme.Theme) {
+	m.theme = t
+	m.fileHeader.SetTheme(t)
+	m.diffPane.SetTheme(t)
+	m.emptyPane.SetTheme(t)
+	m.filterBar.SetTheme(t)
+	m.footer.SetTheme(t)
+	m.dialogs.SetTheme(t)
+	m.refreshWorkspace(false)
+}
+
+// SetDiffs replaces the loaded diff dataset.
+func (m *Model) SetDiffs(diffs []parser.DiffResult) {
+	m.workspace.SetDiffs(diffs)
+	if m.activeFile >= m.workspace.FileCount() {
+		m.activeFile = max(0, m.workspace.FileCount()-1)
+	}
 	m.refreshWorkspace(true)
 }
 
-func (m *model) setActiveVisible(index int) {
-	if len(m.visible) == 0 {
+// SetFileIndex selects the active file by absolute dataset index.
+func (m *Model) SetFileIndex(index int) {
+	if m.workspace.FileCount() == 0 {
 		m.activeFile = 0
+		m.refreshWorkspace(true)
 		return
 	}
 	if index < 0 {
 		index = 0
 	}
-	if index >= len(m.visible) {
-		index = len(m.visible) - 1
+	if index >= m.workspace.FileCount() {
+		index = m.workspace.FileCount() - 1
 	}
-	m.activeFile = m.visible[index]
+	m.activeFile = index
 	m.refreshWorkspace(true)
 }
 
-func (m *model) nextFile() {
+// NextFile selects the next visible file.
+func (m *Model) NextFile() {
 	if len(m.visible) == 0 {
 		return
 	}
@@ -294,7 +305,8 @@ func (m *model) nextFile() {
 	m.refreshWorkspace(true)
 }
 
-func (m *model) prevFile() {
+// PrevFile selects the previous visible file.
+func (m *Model) PrevFile() {
 	if len(m.visible) == 0 {
 		return
 	}
@@ -311,7 +323,96 @@ func (m *model) prevFile() {
 	m.refreshWorkspace(true)
 }
 
-func (m *model) indexOfActiveVisible() int {
+// NextHunk jumps the scroll viewport to the next hunk.
+func (m *Model) NextHunk() {
+	if len(m.hunkStarts) == 0 {
+		return
+	}
+	cur := m.activeHunkIndex()
+	if cur+1 < len(m.hunkStarts) {
+		m.diffPane.SetScroll(m.hunkStarts[cur+1])
+	}
+}
+
+// PrevHunk jumps the scroll viewport to the previous hunk.
+func (m *Model) PrevHunk() {
+	if len(m.hunkStarts) == 0 {
+		return
+	}
+	cur := m.activeHunkIndex()
+	if cur > 0 {
+		m.diffPane.SetScroll(m.hunkStarts[cur-1])
+	}
+}
+
+// ScrollUp moves the viewport up by n lines.
+func (m *Model) ScrollUp(n int) {
+	m.diffPane.ScrollUp(n)
+}
+
+// ScrollDown moves the viewport down by n lines.
+func (m *Model) ScrollDown(n int) {
+	m.diffPane.ScrollDown(n)
+}
+
+// State returns a readonly snapshot of viewer state.
+func (m *Model) State() State {
+	visible := append([]int{}, m.visible...)
+	hunkStarts := append([]int{}, m.hunkStarts...)
+	return State{
+		Width:      m.width,
+		Height:     m.height,
+		Layout:     m.layout,
+		ActiveFile: m.activeFile,
+		Visible:    visible,
+		FileCount:  m.workspace.FileCount(),
+		Scroll:     m.diffPane.Scroll(),
+		MaxScroll:  m.diffPane.MaxScroll(),
+		HunkStarts: hunkStarts,
+		ActiveHunk: m.activeHunkIndex(),
+		FilterMode: m.filterMode,
+		Filter:     m.filterQuery,
+		ShowEmpty:  m.showEmpty,
+	}
+}
+
+func (m *Model) initWidgets() {
+	m.fileHeader = fileheader.New(m.theme)
+	m.diffPane = diffpane.New(m.theme)
+	m.emptyPane = emptystatepane.New("No diff content", "Nothing to show yet.", m.theme)
+	m.filterBar = filterbar.New("bento-diffs", m.theme)
+	m.dialogs = dialog.New()
+	m.dialogs.SetTheme(m.theme)
+	m.footer = bar.New(
+		bar.FooterAnchored(),
+		bar.WithTheme(m.theme),
+	)
+	m.refreshWorkspace(true)
+}
+
+func (m *Model) resize() {
+	if m.fileHeader == nil {
+		return
+	}
+	m.fileHeader.SetSize(m.width, 1)
+	m.footer.SetSize(m.width, 1)
+	m.filterBar.SetSize(m.width)
+	diffWidth := max(1, m.width)
+	m.diffPane.SetSize(diffWidth, m.contentHeight())
+	m.emptyPane.SetSize(diffWidth, m.contentHeight())
+}
+
+func (m *Model) toggleLayout() {
+	if m.layout == LayoutSplit {
+		m.layout = LayoutStacked
+	} else {
+		m.layout = LayoutSplit
+	}
+	m.resize()
+	m.refreshWorkspace(true)
+}
+
+func (m *Model) indexOfActiveVisible() int {
 	for i, v := range m.visible {
 		if v == m.activeFile {
 			return i
@@ -320,7 +421,23 @@ func (m *model) indexOfActiveVisible() int {
 	return -1
 }
 
-func (m *model) contentHeight() int {
+func (m *Model) activeHunkIndex() int {
+	if len(m.hunkStarts) == 0 {
+		return 0
+	}
+	scroll := m.diffPane.Scroll()
+	idx := 0
+	for i := 0; i < len(m.hunkStarts); i++ {
+		if m.hunkStarts[i] <= scroll {
+			idx = i
+			continue
+		}
+		break
+	}
+	return idx
+}
+
+func (m *Model) contentHeight() int {
 	h := m.height - 2
 	if h < 1 {
 		return 1
@@ -335,14 +452,14 @@ func toPaneLayout(l Layout) diffpane.Layout {
 	return diffpane.LayoutSplit
 }
 
-func toWorkspaceLayout(l Layout) adapter.Layout {
+func toWorkspaceLayout(l Layout) workspace.Layout {
 	if l == LayoutStacked {
-		return adapter.LayoutStacked
+		return workspace.LayoutStacked
 	}
-	return adapter.LayoutSplit
+	return workspace.LayoutSplit
 }
 
-func (m *model) refreshWorkspace(resetScroll bool) {
+func (m *Model) refreshWorkspace(resetScroll bool) {
 	if m.workspace == nil {
 		return
 	}
@@ -352,7 +469,7 @@ func (m *model) refreshWorkspace(resetScroll bool) {
 		diffWidth = 1
 	}
 
-	ws := m.workspace.Build(m.activeFile, adapter.RenderOptions{
+	ws := m.workspace.Build(m.activeFile, workspace.RenderOptions{
 		Width:           diffWidth,
 		Layout:          toWorkspaceLayout(m.layout),
 		Theme:           m.theme,
@@ -372,6 +489,7 @@ func (m *model) refreshWorkspace(resetScroll bool) {
 		m.activeFile = m.visible[ws.Rail.ActiveFile]
 	}
 
+	m.hunkStarts = append(m.hunkStarts[:0], ws.Main.HunkStarts...)
 	m.diffPane.SetLines(ws.Main.Lines, resetScroll)
 	m.showEmpty = len(ws.Main.Lines) == 0
 	if m.showEmpty {
@@ -393,6 +511,9 @@ func (m *model) refreshWorkspace(resetScroll bool) {
 		cards = append(cards, bar.Card{Command: c.Command, Label: c.Label, Enabled: c.Enabled})
 	}
 	m.footer.SetCards(cards)
+	fileTotal := max(1, m.workspace.FileCount())
+	hunkTotal := max(1, len(m.hunkStarts))
+	m.footer.SetStatusPill(fmt.Sprintf("file %d/%d  hunk %d/%d", m.activeFile+1, fileTotal, m.activeHunkIndex()+1, hunkTotal))
 }
 
 func keyMatch(msg tea.KeyMsg, binding interface{ Keys() []string }) bool {
@@ -404,11 +525,14 @@ func keyMatch(msg tea.KeyMsg, binding interface{ Keys() []string }) bool {
 	return false
 }
 
-func (m *model) openPalette() tea.Cmd {
+func (m *Model) openPalette() tea.Cmd {
 	commands := []dialog.Command{
+		{Label: "Theme picker", Group: "View", Keybind: "", Action: func() tea.Msg { return openThemePickerMsg{} }},
 		{Label: "Toggle layout", Group: "View", Keybind: "tab", Action: func() tea.Msg { return toggleLayoutMsg{} }},
 		{Label: "Next file", Group: "Navigate", Keybind: "]", Action: func() tea.Msg { return nextFileMsg{} }},
 		{Label: "Previous file", Group: "Navigate", Keybind: "[", Action: func() tea.Msg { return prevFileMsg{} }},
+		{Label: "Next hunk", Group: "Navigate", Keybind: "n", Action: func() tea.Msg { return nextHunkMsg{} }},
+		{Label: "Previous hunk", Group: "Navigate", Keybind: "N", Action: func() tea.Msg { return prevHunkMsg{} }},
 		{Label: "Filter files", Group: "Search", Keybind: "/", Action: func() tea.Msg { return startFilterMsg{} }},
 		{Label: "Clear filter", Group: "Search", Keybind: "esc", Action: func() tea.Msg { return clearFilterMsg{} }},
 		{Label: "Quit", Group: "App", Keybind: "q", Action: func() tea.Msg { return tea.Quit() }},
@@ -416,7 +540,19 @@ func (m *model) openPalette() tea.Cmd {
 	return commandpaletteflow.Open(commands)
 }
 
-func (m *model) headerView() rooms.Sizable {
+func openThemePicker() tea.Cmd {
+	return func() tea.Msg {
+		h := len(theme.AvailableThemes()) + 8
+		return dialog.Open(dialog.Custom{
+			DialogTitle: "Themes",
+			Content:     dialog.NewThemePicker(),
+			Width:       44,
+			Height:      h,
+		})
+	}
+}
+
+func (m *Model) headerView() rooms.Sizable {
 	if m.filterMode || m.filterQuery != "" {
 		return m.filterBar.Input
 	}
@@ -459,14 +595,14 @@ func (c *focusContent) View() tea.View {
 	return tea.NewView(head + "\n" + body)
 }
 
-func (m *model) mainView() rooms.Sizable {
+func (m *Model) mainView() rooms.Sizable {
 	if m.showEmpty {
 		return m.emptyPane
 	}
 	return m.diffPane
 }
 
-func (m *model) footerView() rooms.Sizable {
+func (m *Model) footerView() rooms.Sizable {
 	if m.filterMode {
 		return m.filterBar.Footer
 	}

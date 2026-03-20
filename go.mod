@@ -8,7 +8,7 @@ require (
 	github.com/alecthomas/chroma/v2 v2.15.0
 	github.com/aymanbagabas/go-udiff v0.3.1
 	github.com/charmbracelet/x/ansi v0.11.6
-	github.com/cloudboy-jh/bentotui v0.5.3
+	github.com/cloudboy-jh/bentotui v0.5.4
 	github.com/sergi/go-diff v1.4.0
 	github.com/sourcegraph/go-diff v0.7.0
 )

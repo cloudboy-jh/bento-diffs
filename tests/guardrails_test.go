@@ -12,11 +12,16 @@ import (
 
 func TestNoRawBubblesImportsInComposition(t *testing.T) {
 	paths := []string{filepath.Join("..", "cmd", "bento-diffs", "main.go")}
-	modelFiles, err := filepath.Glob(filepath.Join("..", "internal", "model", "*.go"))
+	modelFiles, err := filepath.Glob(filepath.Join("..", "pkg", "bentodiffs", "viewer", "*.go"))
 	if err != nil {
 		t.Fatalf("glob model files: %v", err)
 	}
 	paths = append(paths, modelFiles...)
+	appFiles, err := filepath.Glob(filepath.Join("..", "pkg", "bentodiffs", "tui", "*.go"))
+	if err != nil {
+		t.Fatalf("glob app files: %v", err)
+	}
+	paths = append(paths, appFiles...)
 
 	for _, path := range paths {
 		fset := token.NewFileSet()
@@ -34,10 +39,15 @@ func TestNoRawBubblesImportsInComposition(t *testing.T) {
 }
 
 func TestNoThemeCurrentThemeInPageViews(t *testing.T) {
-	modelFiles, err := filepath.Glob(filepath.Join("..", "internal", "model", "*.go"))
+	modelFiles, err := filepath.Glob(filepath.Join("..", "pkg", "bentodiffs", "viewer", "*.go"))
 	if err != nil {
 		t.Fatalf("glob model files: %v", err)
 	}
+	appFiles, err := filepath.Glob(filepath.Join("..", "pkg", "bentodiffs", "tui", "*.go"))
+	if err != nil {
+		t.Fatalf("glob app files: %v", err)
+	}
+	modelFiles = append(modelFiles, appFiles...)
 
 	for _, path := range modelFiles {
 		src, err := os.ReadFile(path)

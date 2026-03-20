@@ -13,8 +13,6 @@ type styles struct {
 	lineNumberFG color.Color
 	removedFG    color.Color
 	addedFG      color.Color
-	mutedFG      color.Color
-	textFG       color.Color
 }
 
 func createStyles(t theme.Theme) styles {
@@ -25,7 +23,5 @@ func createStyles(t theme.Theme) styles {
 		lineNumberFG: t.DiffLineNum(),
 		removedFG:    t.DiffRemoved(),
 		addedFG:      t.DiffAdded(),
-		mutedFG:      t.TextMuted(),
-		textFG:       t.Text(),
 	}
 }

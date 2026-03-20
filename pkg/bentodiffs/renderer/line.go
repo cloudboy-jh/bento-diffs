@@ -6,7 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/cloudboy-jh/bento-diffs/internal/parser"
+	"github.com/cloudboy-jh/bento-diffs/pkg/bentodiffs/parser"
 	"github.com/cloudboy-jh/bentotui/theme"
 	tstyles "github.com/cloudboy-jh/bentotui/theme/styles"
 )

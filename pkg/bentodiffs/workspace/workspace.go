@@ -1,11 +1,11 @@
-package adapter
+package workspace
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudboy-jh/bento-diffs/internal/parser"
-	"github.com/cloudboy-jh/bento-diffs/internal/renderer"
+	"github.com/cloudboy-jh/bento-diffs/pkg/bentodiffs/parser"
+	"github.com/cloudboy-jh/bento-diffs/pkg/bentodiffs/renderer"
 	"github.com/cloudboy-jh/bentotui/theme"
 )
 
@@ -37,8 +37,9 @@ type FileRailDTO struct {
 }
 
 type MainDiffPaneDTO struct {
-	FileName string
-	Lines    []string
+	FileName   string
+	Lines      []string
+	HunkStarts []int
 }
 
 type FooterCardDTO struct {
@@ -67,19 +68,23 @@ type RenderOptions struct {
 	FilterQuery     string
 }
 
-type WorkspaceAdapter struct {
+type Adapter struct {
 	diffs []parser.DiffResult
 }
 
-func NewWorkspaceAdapter(diffs []parser.DiffResult) *WorkspaceAdapter {
-	return &WorkspaceAdapter{diffs: append([]parser.DiffResult{}, diffs...)}
+func New(diffs []parser.DiffResult) *Adapter {
+	return &Adapter{diffs: append([]parser.DiffResult{}, diffs...)}
 }
 
-func (a *WorkspaceAdapter) FileCount() int {
+func (a *Adapter) SetDiffs(diffs []parser.DiffResult) {
+	a.diffs = append([]parser.DiffResult{}, diffs...)
+}
+
+func (a *Adapter) FileCount() int {
 	return len(a.diffs)
 }
 
-func (a *WorkspaceAdapter) Build(activeFile int, opts RenderOptions) WorkspaceDTO {
+func (a *Adapter) Build(activeFile int, opts RenderOptions) WorkspaceDTO {
 	count := len(a.diffs)
 	if count == 0 {
 		return WorkspaceDTO{
@@ -94,7 +99,7 @@ func (a *WorkspaceAdapter) Build(activeFile int, opts RenderOptions) WorkspaceDT
 		return WorkspaceDTO{
 			Header: HeaderDTO{Layout: opts.Layout},
 			Rail:   FileRailDTO{Title: "Changed files", ActiveFile: 0},
-			Main:   MainDiffPaneDTO{Lines: nil},
+			Main:   MainDiffPaneDTO{Lines: nil, HunkStarts: nil},
 			Footer: FooterStatusDTO{Cards: []FooterCardDTO{
 				{Command: "/", Label: "filter", Enabled: true},
 				{Command: "esc", Label: "clear", Enabled: strings.TrimSpace(opts.FilterQuery) != ""},
@@ -125,11 +130,11 @@ func (a *WorkspaceAdapter) Build(activeFile int, opts RenderOptions) WorkspaceDT
 		}
 	}
 
-	lines := make([]string, 0)
+	rendered := renderer.RenderedDiff{}
 	if opts.Layout == LayoutStacked {
-		lines = append(lines, renderer.RenderUnifiedDiff(active, opts.Width, name, opts.Theme, opts.SyntaxEnabled, opts.ShowLineNumbers)...)
+		rendered = renderer.RenderUnifiedDiffWithMeta(active, opts.Width, name, opts.Theme, opts.SyntaxEnabled, opts.ShowLineNumbers)
 	} else {
-		lines = append(lines, renderer.RenderSideBySideDiff(active, opts.Width, name, opts.Theme, opts.SyntaxEnabled, opts.ShowLineNumbers)...)
+		rendered = renderer.RenderSideBySideDiffWithMeta(active, opts.Width, name, opts.Theme, opts.SyntaxEnabled, opts.ShowLineNumbers)
 	}
 
 	return WorkspaceDTO{
@@ -145,11 +150,13 @@ func (a *WorkspaceAdapter) Build(activeFile int, opts RenderOptions) WorkspaceDT
 			ActiveFile: visibleActive,
 		},
 		Main: MainDiffPaneDTO{
-			FileName: name,
-			Lines:    lines,
+			FileName:   name,
+			Lines:      rendered.Lines,
+			HunkStarts: rendered.HunkStarts,
 		},
 		Footer: FooterStatusDTO{Cards: []FooterCardDTO{
 			{Command: "j/k", Label: "scroll", Enabled: true},
+			{Command: "n/N", Label: "hunk", Enabled: len(rendered.HunkStarts) > 1},
 			{Command: "tab", Label: "layout", Enabled: true},
 			{Command: "[/]", Label: "next/prev", Enabled: len(visible) > 1},
 			{Command: "/", Label: "filter", Enabled: true},
@@ -159,7 +166,7 @@ func (a *WorkspaceAdapter) Build(activeFile int, opts RenderOptions) WorkspaceDT
 	}
 }
 
-func (a *WorkspaceAdapter) FilteredIndices(query string) []int {
+func (a *Adapter) FilteredIndices(query string) []int {
 	query = strings.TrimSpace(strings.ToLower(query))
 	indices := make([]int, 0, len(a.diffs))
 	for i, d := range a.diffs {

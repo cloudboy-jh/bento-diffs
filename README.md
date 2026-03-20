@@ -1,22 +1,45 @@
 ![bento-diffs screenshot](./screen-shot-readme.png)
 
-# bento-diffs
+# bentodiffs
 
-Simple terminal diff viewer that works as both a CLI app and a Go library.
+Terminal diff tool with a full standalone TUI app shell and an embeddable Go viewer package.
 
 ## Repo layout
 
 ```text
 cmd/bento-diffs/   CLI entrypoint
-internal/          parser, renderer, adapter, and app internals
-bricks/            local UI components
-recipes/           local interaction flows
+pkg/bentodiffs/    embeddable parser + renderer + workspace + viewer APIs
+pkg/bentodiffs/tui standalone app shell (home, commits, diff routes)
+bricks/            local Bento bricks consumed by viewer
+recipes/           local Bento recipes consumed by viewer
 docs/              architecture notes
 ```
 
 ## CLI
 
-Run the mock view:
+Run the full app shell:
+
+```bash
+go run ./cmd/bento-diffs
+```
+
+Repo discovery reads config from:
+
+```text
+~/.config/bentodiffs/config.json
+```
+
+Example:
+
+```json
+{
+  "repo_roots": [
+    "/Users/you/code"
+  ]
+}
+```
+
+Run the mock diff route:
 
 ```bash
 go run ./cmd/bento-diffs --mock

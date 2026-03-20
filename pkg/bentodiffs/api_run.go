@@ -2,11 +2,11 @@ package bentodiffs
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
-	"github.com/cloudboy-jh/bento-diffs/internal/adapter"
-	"github.com/cloudboy-jh/bento-diffs/internal/model"
-	"github.com/cloudboy-jh/bento-diffs/internal/parser"
+	tea "charm.land/bubbletea/v2"
+	"github.com/cloudboy-jh/bento-diffs/pkg/bentodiffs/parser"
 	"github.com/cloudboy-jh/bentotui/theme"
 )
 
@@ -32,11 +32,7 @@ func AvailableThemes() []string {
 }
 
 func RunDiffs(diffs []DiffResult, opts Options) error {
-	internal := make([]parser.DiffResult, 0, len(diffs))
-	for _, d := range diffs {
-		internal = append(internal, toInternalDiffResult(d))
-	}
-	return runInternalDiffs(internal, opts)
+	return runProgram(diffs, opts)
 }
 
 func RunPatch(patch string, fileName string, opts Options) error {
@@ -50,7 +46,7 @@ func RunPatch(patch string, fileName string, opts Options) error {
 	if len(diffs) == 1 && diffs[0].DisplayFile == "" && fileName != "" {
 		diffs[0].DisplayFile = fileName
 	}
-	return runInternalDiffs(diffs, opts)
+	return runProgram(diffs, opts)
 }
 
 func RunFiles(before, after, filename string, context int, opts Options) error {
@@ -58,11 +54,8 @@ func RunFiles(before, after, filename string, context int, opts Options) error {
 	return RunPatch(patch, filename, opts)
 }
 
-func runInternalDiffs(diffs []parser.DiffResult, opts Options) error {
-	layout := model.LayoutSplit
-	if opts.Layout == "stacked" {
-		layout = model.LayoutStacked
-	} else if opts.Layout != "split" {
+func runProgram(diffs []DiffResult, opts Options) error {
+	if opts.Layout != "split" && opts.Layout != "stacked" {
 		return fmt.Errorf("--layout must be split or stacked")
 	}
 
@@ -70,12 +63,21 @@ func runInternalDiffs(diffs []parser.DiffResult, opts Options) error {
 		return fmt.Errorf("unknown theme %q (available themes: %s)", opts.ThemeName, strings.Join(theme.AvailableThemes(), ", "))
 	}
 
-	workspace := adapter.NewWorkspaceAdapter(diffs)
-	app := model.New(workspace, theme.CurrentTheme(), model.Options{
-		Layout:          layout,
+	v := NewViewer(ViewerOptions{
+		Diffs:           diffs,
+		Layout:          opts.Layout,
 		SyntaxEnabled:   opts.SyntaxEnabled,
 		ShowLineNumbers: opts.ShowLineNumbers,
-		UseTTYInput:     opts.UseTTYInput,
+		Theme:           theme.CurrentTheme(),
 	})
-	return app.Run()
+
+	programOpts := []tea.ProgramOption{}
+	if opts.UseTTYInput {
+		if tty, err := os.Open("CONIN$"); err == nil {
+			programOpts = append(programOpts, tea.WithInput(tty))
+		}
+	}
+	p := tea.NewProgram(v.TeaModel(), programOpts...)
+	_, err := p.Run()
+	return err
 }

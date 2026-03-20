@@ -23,6 +23,9 @@ type DiffLine = core.DiffLine
 type Hunk = core.Hunk
 type DiffResult = core.DiffResult
 type Options = core.Options
+type Viewer = core.Viewer
+type ViewerOptions = core.ViewerOptions
+type ViewerState = core.ViewerState
 
 func DefaultOptions() Options {
 	return core.DefaultOptions()
@@ -58,4 +61,8 @@ func RunPatch(patch string, fileName string, opts Options) error {
 
 func RunFiles(before, after, filename string, context int, opts Options) error {
 	return core.RunFiles(before, after, filename, context, opts)
+}
+
+func NewViewer(opts ViewerOptions) Viewer {
+	return core.NewViewer(opts)
 }

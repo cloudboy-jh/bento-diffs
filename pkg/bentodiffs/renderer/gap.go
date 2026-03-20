@@ -3,7 +3,7 @@ package renderer
 import (
 	"fmt"
 
-	"github.com/cloudboy-jh/bento-diffs/internal/parser"
+	"github.com/cloudboy-jh/bento-diffs/pkg/bentodiffs/parser"
 )
 
 func hunkGapLines(prev, next parser.Hunk) int {

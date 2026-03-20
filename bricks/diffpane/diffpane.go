@@ -70,6 +70,24 @@ func (m *Model) ScrollUp(n int) {
 	}
 }
 
+func (m *Model) SetScroll(offset int) {
+	m.scroll = offset
+	if m.scroll > m.maxScroll {
+		m.scroll = m.maxScroll
+	}
+	if m.scroll < 0 {
+		m.scroll = 0
+	}
+}
+
+func (m *Model) Scroll() int {
+	return m.scroll
+}
+
+func (m *Model) MaxScroll() int {
+	return m.maxScroll
+}
+
 func (m *Model) View() tea.View {
 	if m.height <= 0 || m.width <= 0 {
 		return tea.NewView("")

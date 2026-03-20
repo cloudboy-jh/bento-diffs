@@ -36,6 +36,8 @@ github.com/clipperhouse/uax29/v2 v2.5.0 h1:x7T0T4eTHDONxFJsL94uKNKPHrclyFI0lm7+w
 github.com/clipperhouse/uax29/v2 v2.5.0/go.mod h1:Wn1g7MK6OoeDT0vL+Q0SQLDz/KpfsVRgg6W7ihQeh4g=
 github.com/cloudboy-jh/bentotui v0.5.3 h1:66xFJLHztAnqdIzerJ914hEDwSP25Ws0668AUlL5Gi4=
 github.com/cloudboy-jh/bentotui v0.5.3/go.mod h1:6J+LJNf0tzJcgOlnaf0kehshsiVLbrY4pjH1lPzpEcA=
+github.com/cloudboy-jh/bentotui v0.5.4 h1:3QQV6n/HfevosQJND5tQcahKAbU1Ce8C8VwNb4+eXi4=
+github.com/cloudboy-jh/bentotui v0.5.4/go.mod h1:6J+LJNf0tzJcgOlnaf0kehshsiVLbrY4pjH1lPzpEcA=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

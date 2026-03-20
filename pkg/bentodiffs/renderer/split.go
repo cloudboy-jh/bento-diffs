@@ -3,7 +3,7 @@ package renderer
 import (
 	"fmt"
 
-	"github.com/cloudboy-jh/bento-diffs/internal/parser"
+	"github.com/cloudboy-jh/bento-diffs/pkg/bentodiffs/parser"
 	"github.com/cloudboy-jh/bentotui/theme"
 	tstyles "github.com/cloudboy-jh/bentotui/theme/styles"
 )
@@ -11,6 +11,11 @@ import (
 type linePair struct {
 	left  *parser.DiffLine
 	right *parser.DiffLine
+}
+
+type RenderedDiff struct {
+	Lines      []string
+	HunkStarts []int
 }
 
 func RenderSideBySideHunk(h parser.Hunk, width int, fileName string, t theme.Theme, syntax bool, showLineNumbers bool) []string {
@@ -30,16 +35,23 @@ func RenderSideBySideHunk(h parser.Hunk, width int, fileName string, t theme.The
 }
 
 func RenderSideBySideDiff(result parser.DiffResult, width int, fileName string, t theme.Theme, syntax bool, showLineNumbers bool) []string {
+	r := RenderSideBySideDiffWithMeta(result, width, fileName, t, syntax, showLineNumbers)
+	return r.Lines
+}
+
+func RenderSideBySideDiffWithMeta(result parser.DiffResult, width int, fileName string, t theme.Theme, syntax bool, showLineNumbers bool) RenderedDiff {
 	out := make([]string, 0)
+	starts := make([]int, 0, len(result.Hunks))
 	for i, h := range result.Hunks {
 		if i > 0 {
 			if gap := hunkGapLines(result.Hunks[i-1], h); gap > 0 {
 				out = append(out, renderSplitCollapsedContextRow(width, gap, t))
 			}
 		}
+		starts = append(starts, len(out))
 		out = append(out, RenderSideBySideHunk(h, width, fileName, t, syntax, showLineNumbers)...)
 	}
-	return out
+	return RenderedDiff{Lines: out, HunkStarts: starts}
 }
 
 func splitWidths(total int) (left int, right int) {

@@ -1,46 +1,24 @@
 package bentodiffs
 
-type LineType int
+import "github.com/cloudboy-jh/bento-diffs/pkg/bentodiffs/parser"
+
+type LineType = parser.LineType
 
 const (
-	LineContext LineType = iota
-	LineAdded
-	LineRemoved
+	LineContext = parser.LineContext
+	LineAdded   = parser.LineAdded
+	LineRemoved = parser.LineRemoved
 )
 
-type SegmentType int
+type SegmentType = parser.SegmentType
 
 const (
-	SegmentEqual SegmentType = iota
-	SegmentAdded
-	SegmentRemoved
+	SegmentEqual   = parser.SegmentEqual
+	SegmentAdded   = parser.SegmentAdded
+	SegmentRemoved = parser.SegmentRemoved
 )
 
-type Segment struct {
-	Start int
-	End   int
-	Type  SegmentType
-	Text  string
-}
-
-type DiffLine struct {
-	Kind      LineType
-	OldLineNo int
-	NewLineNo int
-	Content   string
-	Segments  []Segment
-}
-
-type Hunk struct {
-	Header string
-	Lines  []DiffLine
-}
-
-type DiffResult struct {
-	OldFile     string
-	NewFile     string
-	DisplayFile string
-	Hunks       []Hunk
-	Additions   int
-	Removals    int
-}
+type Segment = parser.Segment
+type DiffLine = parser.DiffLine
+type Hunk = parser.Hunk
+type DiffResult = parser.DiffResult

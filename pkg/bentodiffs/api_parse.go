@@ -1,25 +1,13 @@
 package bentodiffs
 
-import "github.com/cloudboy-jh/bento-diffs/internal/parser"
+import "github.com/cloudboy-jh/bento-diffs/pkg/bentodiffs/parser"
 
 func ParseUnifiedDiff(patch string) (DiffResult, error) {
-	res, err := parser.ParseUnifiedDiff(patch)
-	if err != nil {
-		return DiffResult{}, err
-	}
-	return toPublicDiffResult(res), nil
+	return parser.ParseUnifiedDiff(patch)
 }
 
 func ParseUnifiedDiffs(patch string) ([]DiffResult, error) {
-	all, err := parser.ParseUnifiedDiffs(patch)
-	if err != nil {
-		return nil, err
-	}
-	res := make([]DiffResult, 0, len(all))
-	for _, d := range all {
-		res = append(res, toPublicDiffResult(d))
-	}
-	return res, nil
+	return parser.ParseUnifiedDiffs(patch)
 }
 
 func GenerateDiff(before, after, filename string, context int) (patch string, additions, removals int) {
@@ -39,9 +27,5 @@ func MockDiffs(context int) ([]DiffResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]DiffResult, 0, len(all))
-	for _, d := range all {
-		out = append(out, toPublicDiffResult(d))
-	}
-	return out, nil
+	return all, nil
 }

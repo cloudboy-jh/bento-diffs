@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	bentodiffs "github.com/cloudboy-jh/bento-diffs"
+	"github.com/cloudboy-jh/bento-diffs/pkg/bentodiffs/tui"
 )
 
 type options struct {
@@ -45,6 +46,19 @@ func main() {
 			os.Exit(1)
 		}
 		if err := bentodiffs.RunDiffs(diffs, runOpts); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if opt.patchPath == "" && opt.beforePath == "" && !opt.stdinSource {
+		if err := tui.Run(tui.Options{
+			ThemeName:       opt.themeName,
+			Layout:          opt.layout,
+			SyntaxEnabled:   !opt.noSyntax,
+			ShowLineNumbers: !opt.noLineNums,
+		}); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
@@ -89,10 +103,6 @@ func parseFlags() (options, error) {
 	st, err := os.Stdin.Stat()
 	if err == nil && (st.Mode()&os.ModeCharDevice) == 0 {
 		opt.stdinSource = true
-	}
-
-	if !opt.mock && opt.patchPath == "" && opt.beforePath == "" && !opt.stdinSource {
-		return opt, errors.New("no input provided (pipe diff, use --patch, or pass two files)")
 	}
 
 	if opt.patchPath != "" && opt.beforePath != "" {
