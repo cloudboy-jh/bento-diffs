@@ -1,8 +1,10 @@
-![bento-diffs screenshot](./screen-shot-readme.png)
+![bentodiffs logo](./bento-diffs-readme.png)
 
 # bentodiffs
 
 Terminal diff tool with a full standalone TUI app shell and an embeddable Go viewer package.
+
+![bentodiffs screenshot](./screen-shot-readme.png)
 
 ## Repo layout
 
